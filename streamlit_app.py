@@ -29,6 +29,7 @@ def load_models():
 
         model = pickle.load(open(model_path, "rb"))
         scaler = pickle.load(open(scaler_path, "rb"))
+        
 
         return model, scaler
 
@@ -229,7 +230,7 @@ elif role == "Doctor":
             st.download_button("Download PDF", pdf_data, "doctor_report.pdf")
 
             # -------------------
-            # FIXED SHAP
+            #  SHAP
             # -------------------
             st.subheader("🔍 Explainable AI (SHAP)")
 
