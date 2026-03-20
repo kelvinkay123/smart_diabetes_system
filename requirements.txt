@@ -5,6 +5,3 @@ scikit-learn
 shap
 matplotlib
 fpdf
-pickle
-sqlite3
-datetime
