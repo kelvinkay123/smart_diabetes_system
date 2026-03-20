@@ -4,6 +4,7 @@ import numpy as np
 import pickle
 import sqlite3
 import shap
+import os
 import matplotlib.pyplot as plt
 from datetime import datetime
 from fpdf import FPDF
@@ -19,17 +20,21 @@ st.subheader("Early Diabetes Risk Prediction using Machine Learning")
 # -------------------
 # LOAD MODEL
 # -------------------
+
 @st.cache_resource
 def load_models():
     try:
-        model = pickle.load(open("diabetes_model.pkl", "rb"))
-        scaler = pickle.load(open("scaler.pkl", "rb"))
+        model_path = os.path.join(os.path.dirname(__file__), "diabetes_model.pkl")
+        scaler_path = os.path.join(os.path.dirname(__file__), "scaler.pkl")
+
+        model = pickle.load(open(model_path, "rb"))
+        scaler = pickle.load(open(scaler_path, "rb"))
+
         return model, scaler
+
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None, None
-
-model, scaler = load_models()
 
 # -------------------
 # DATABASE
