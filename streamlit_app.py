@@ -35,8 +35,9 @@ def load_models():
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None, None
-    model, scaler = load_models()
 
+# ✅ CALL FUNCTION HERE (OUTSIDE)
+model, scaler = load_models()
 # -------------------
 # DATABASE
 # -------------------
