@@ -69,11 +69,9 @@ model, scaler = load_models()
 @st.cache_resource
 def init_db():
     db_path = os.path.join(os.getcwd(), "patients.db")
-    
     conn = sqlite3.connect(db_path, check_same_thread=False)
-    c = conn.cursor()
 
-    c.execute("""
+    conn.execute("""
     CREATE TABLE IF NOT EXISTS patients(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         pregnancies INT,
@@ -93,6 +91,10 @@ def init_db():
 
     conn.commit()
     return conn
+
+
+conn = init_db()
+c = conn.cursor()
 
 # -------------------
 # ROLE
