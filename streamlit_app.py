@@ -14,6 +14,30 @@ from fpdf import FPDF
 # -------------------
 st.set_page_config(page_title="Smart Diabetes Prediction", layout="centered")
 
+# --- CUSTOM UI STYLING (Added for the visual cards) ---
+st.markdown("""
+<style>
+    .risk-factors-box {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #6c757d;
+        height: 100%;
+    }
+    .result-card {
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #e1e4e8;
+        background-color: #ffffff;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.05);
+    }
+    .status-header {
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🩺 Smart Healthcare System")
 st.subheader("Early Diabetes Risk Prediction using Machine Learning")
 
@@ -30,7 +54,6 @@ def load_models():
         model = pickle.load(open(model_path, "rb"))
         scaler = pickle.load(open(scaler_path, "rb"))
         
-
         return model, scaler
 
     except Exception as e:
@@ -39,6 +62,7 @@ def load_models():
 
 # ✅ CALL FUNCTION HERE (OUTSIDE)
 model, scaler = load_models()
+
 # -------------------
 # DATABASE
 # -------------------
@@ -95,8 +119,7 @@ if role == "Patient":
     if st.button("Check Preliminary Risk"):
 
         bmi = weight / ((height / 100) ** 2)
-        st.info(f"BMI: {round(bmi, 2)}")
-
+        
         risk_score = sum([
             thirst == "Yes",
             urination == "Yes",
@@ -109,13 +132,40 @@ if role == "Patient":
 
         if risk_score <= 2:
             risk = "Low"
-            st.success("Low Risk")
+            risk_color = "#28a745"
         elif risk_score <= 4:
             risk = "Medium"
-            st.warning("Medium Risk")
+            risk_color = "#ffc107"
         else:
             risk = "High"
-            st.error("High Risk - Consult a doctor")
+            risk_color = "#dc3545"
+
+        # --- REFINED PATIENT DISPLAY (MIRRORING IMAGE) ---
+        st.subheader("Assessment Results")
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.markdown(f"""
+            <div class="risk-factors-box">
+                <b>Key Risk Factors</b><br><br>
+                • Age: {age}<br>
+                • BMI: {round(bmi, 2)}<br>
+                • Family History: {family}<br>
+                • Symptoms: {risk_score} detected
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with col2:
+            st.markdown(f"""
+            <div class="result-card">
+                <div class="status-header" style="color: {risk_color}; font-size: 24px;">
+                    ✅ {risk} Risk of Diabetes
+                </div>
+                <p>Based on your self-assessment, you have a <b>{risk}</b> risk level.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            st.progress(risk_score / 7)
 
         st.subheader("🧠 Clinical Insight")
 
@@ -178,20 +228,40 @@ elif role == "Doctor":
             prob = model.predict_proba(scaled)[0][1]
 
             risk = "Low" if prob < 0.33 else "Medium" if prob < 0.66 else "High"
+            risk_color = "#28a745" if risk == "Low" else "#ffc107" if risk == "Medium" else "#dc3545"
 
             c.execute("""
             INSERT INTO patients VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (*inputs, prediction, prob, risk, datetime.now()))
             conn.commit()
 
+            # --- REFINED DOCTOR DISPLAY (MIRRORING IMAGE) ---
             st.subheader("Prediction Result")
-            st.metric("Probability", f"{prob*100:.2f}%")
-            st.progress(float(prob))
-
-            if prediction == 1:
-                st.error(f"High Risk ({risk})")
-            else:
-                st.success(f"Low Risk ({risk})")
+            
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                st.markdown(f"""
+                <div class="risk-factors-box">
+                    <b>Key Risk Factors</b><br><br>
+                    • Age: {inputs[7]}<br>
+                    • Glucose: {inputs[1]}<br>
+                    • BP: {inputs[2]}<br>
+                    • BMI: {inputs[5]}
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col2:
+                status_text = "Negative" if prediction == 0 else "Positive"
+                st.markdown(f"""
+                <div class="result-card">
+                    <div class="status-header" style="color: {risk_color}; font-size: 24px;">
+                        {'✅' if prediction == 0 else '⚠️'} {risk} Risk - Diabetes {status_text}
+                    </div>
+                    <p style="margin-bottom:0;">Risk Probability: <b>{prob*100:.2f}%</b></p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.progress(float(prob))
 
             # Clinical Insight
             st.subheader("🧠 Clinical Insight")
@@ -237,11 +307,9 @@ elif role == "Doctor":
             explainer = shap.Explainer(model)
             shap_values = explainer(scaled)
 
-            # Handle multi-output safely
             vals = shap_values.values
             base = shap_values.base_values
 
-            # If multi-output → pick class 1 if exists else 0
             if len(vals.shape) == 3:
                 class_index = 1 if vals.shape[2] > 1 else 0
                 vals = vals[0, :, class_index]
@@ -266,14 +334,15 @@ elif role == "Doctor":
 
     # Records
     st.subheader("📋 Patient Records")
-
     history = pd.read_sql("SELECT * FROM patients", conn)
 
     if len(history) > 0:
         st.dataframe(history)
-
         csv = history.to_csv(index=False)
         st.download_button("Download CSV", csv, "patient_records.csv")
     else:
         st.warning("No patient records found yet.")
-        
+
+# --- FOOTER DISCLAIMER ---
+st.markdown("---")
+st.caption("Disclaimer: This tool provides a risk assessment and is not a substitute for professional medical advice.")
