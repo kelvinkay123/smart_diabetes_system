@@ -38,7 +38,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🩺 Smart Healthcare System")
+st.title(" 🩺 Smart Healthcare System")
 st.subheader("Early Diabetes Risk Prediction using Machine Learning")
 
 # -------------------
@@ -143,7 +143,6 @@ if role == "Patient":
             risk = "High"
             risk_color = "#dc3545"
 
-        # --- REFINED PATIENT DISPLAY (MIRRORING IMAGE) ---
         st.subheader("Assessment Results")
         
         col1, col2 = st.columns([1, 2])
@@ -210,6 +209,8 @@ elif role == "Doctor":
 
     st.header("🩺 Clinical Diabetes Prediction")
 
+    feature_names = ["Pregnancies", "Glucose", "Blood Pressure", "Skin Thickness", "Insulin", "BMI", "DPF", "Age"]
+    
     inputs = [
         st.number_input("Pregnancies", 0, 20, 1),
         st.number_input("Glucose", 0, 300, 120),
@@ -238,7 +239,6 @@ elif role == "Doctor":
             """, (*inputs, prediction, prob, risk, datetime.now()))
             conn.commit()
 
-            # --- REFINED DOCTOR DISPLAY (MIRRORING IMAGE) ---
             st.subheader("Prediction Result")
             
             col1, col2 = st.columns([1, 2])
@@ -266,7 +266,6 @@ elif role == "Doctor":
                 """, unsafe_allow_html=True)
                 st.progress(float(prob))
 
-            # Clinical Insight
             st.subheader("🧠 Clinical Insight")
             if risk == "Low":
                 st.info("Patient is stable.")
@@ -275,41 +274,16 @@ elif role == "Doctor":
             else:
                 st.error("Immediate medical attention required.")
 
-            # Export
-            result_data = pd.DataFrame([{
-                "Prediction": prediction,
-                "Probability": prob,
-                "Risk": risk,
-                "Timestamp": datetime.now()
-            }])
-
-            st.subheader("⬇ Export Result")
-
-            csv = result_data.to_csv(index=False)
-            st.download_button("Download CSV", csv, "doctor_result.csv")
-
-            def generate_pdf(data):
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", size=12)
-                pdf.cell(200, 10, "Doctor Prediction Report", ln=True)
-
-                for col in data.columns:
-                    pdf.cell(200, 10, f"{col}: {data[col].iloc[0]}", ln=True)
-
-                return pdf.output(dest='S').encode('latin-1')
-
-            pdf_data = generate_pdf(result_data)
-            st.download_button("Download PDF", pdf_data, "doctor_report.pdf")
-
             # -------------------
-            #  SHAP
+            #  SHAP FEATURES (UPDATED)
             # -------------------
-            st.subheader("🔍 Explainable AI (SHAP)")
+            st.markdown("---")
+            st.subheader("📊 Top Contributing Factors")
 
             explainer = shap.Explainer(model)
             shap_values = explainer(scaled)
 
+            # Process SHAP values for display
             vals = shap_values.values
             base = shap_values.base_values
 
@@ -321,31 +295,60 @@ elif role == "Doctor":
                 vals = vals[0]
                 base = base[0]
 
-            fig, ax = plt.subplots()
+            # Create the Feature Importance Table
+            shap_df = pd.DataFrame({
+                "Feature": feature_names,
+                "SHAP Value": np.around(vals, 4)
+            }).sort_values(by="SHAP Value", key=abs, ascending=False)
+            
+            st.table(shap_df.head(5))
+
+            st.subheader("📈 SHAP Waterfall Explanation")
+            fig, ax = plt.subplots(figsize=(10, 6))
             shap.plots.waterfall(
                 shap.Explanation(
                     values=vals,
                     base_values=base,
-                    data=scaled[0]
+                    data=inputs, # Using raw inputs for better labels
+                    feature_names=feature_names
                 ),
                 show=False
             )
             st.pyplot(fig)
 
+            # Export
+            st.subheader("⬇ Export Result")
+            result_data = pd.DataFrame([{
+                "Prediction": prediction,
+                "Probability": prob,
+                "Risk": risk,
+                "Timestamp": datetime.now()
+            }])
+            csv = result_data.to_csv(index=False)
+            st.download_button("Download CSV", csv, "doctor_result.csv")
+
         except Exception as e:
             st.error(f"Prediction failed: {e}")
 
-    # Records
+   # Records
     st.subheader("📋 Patient Records")
+    
+    # Use a fresh query to get data
     history = pd.read_sql("SELECT * FROM patients", conn)
 
     if len(history) > 0:
-        st.dataframe(history)
+        # --- FIX: Ensure the prediction column is readable ---
+        # Convert 0/1 to text labels so Streamlit renders them correctly
+        display_df = history.copy()
+        display_df['prediction'] = display_df['prediction'].map({0: 'Negative', 1: 'Positive'})
+        
+        # Display the modified dataframe
+        st.dataframe(display_df)
+        
+        # Keep the original CSV for download
         csv = history.to_csv(index=False)
-        st.download_button("Download CSV", csv, "patient_records.csv")
+        st.download_button("Download Records (CSV)", csv, "patient_records.csv")
     else:
         st.warning("No patient records found yet.")
-
-# --- FOOTER DISCLAIMER ---
 st.markdown("---")
 st.caption("Disclaimer: This tool provides a risk assessment and is not a substitute for professional medical advice.")
