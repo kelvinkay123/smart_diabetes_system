@@ -232,11 +232,19 @@ elif role == "Doctor":
             risk = "Low" if prob < 0.33 else "Medium" if prob < 0.66 else "High"
             risk_color = "#28a745" if risk == "Low" else "#ffc107" if risk == "Medium" else "#dc3545"
 
+            # --- FIX: Convert NumPy types to Python native types for SQLite ---
             c.execute("""
-            INSERT INTO patients VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, (*inputs, prediction, prob, risk, datetime.now()))
+            INSERT INTO patients (pregnancies, glucose, bp, skin, insulin, bmi, dpf, age, prediction, probability, risk, timestamp)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                int(inputs[0]), float(inputs[1]), float(inputs[2]), 
+                float(inputs[3]), float(inputs[4]), float(inputs[5]), 
+                float(inputs[6]), int(inputs[7]), int(prediction), 
+                float(prob), risk, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ))
             conn.commit()
-
+            
+            
             st.subheader("Prediction Result")
             col1, col2 = st.columns([1, 2])
             
@@ -354,6 +362,9 @@ elif role == "Doctor":
         st.download_button("Download Records (CSV)", csv_hist, "all_patient_records.csv")
     else:
         st.warning("No records found.")
+        
+        
+        
 
 st.markdown("---")
 st.caption("Disclaimer: This tool provides a risk assessment and is not a substitute for professional medical advice.")
