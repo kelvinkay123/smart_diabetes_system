@@ -14,7 +14,7 @@ from fpdf import FPDF
 # -------------------
 st.set_page_config(page_title="Smart Diabetes Prediction", layout="centered")
 
-# --- CUSTOM UI STYLING (Added for the visual cards) ---
+# --- CUSTOM UI STYLING ---
 st.markdown("""
 <style>
     .risk-factors-box {
@@ -44,23 +44,18 @@ st.subheader("Early Diabetes Risk Prediction using Machine Learning")
 # -------------------
 # LOAD MODEL
 # -------------------
-
 @st.cache_resource
 def load_models():
     try:
         model_path = os.path.join(os.path.dirname(__file__), "diabetes_model.pkl")
         scaler_path = os.path.join(os.path.dirname(__file__), "scaler.pkl")
-
         model = pickle.load(open(model_path, "rb"))
         scaler = pickle.load(open(scaler_path, "rb"))
-        
         return model, scaler
-
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None, None
 
-# ✅ CALL FUNCTION HERE (OUTSIDE)
 model, scaler = load_models()
 
 # -------------------
@@ -68,16 +63,11 @@ model, scaler = load_models()
 # -------------------
 @st.cache_resource
 def init_db():
-    # Use a writable path. On Streamlit Cloud, /tmp/ is usually the best bet.
-    # On local Windows/Mac, current directory is usually fine unless restricted.
     db_path = os.path.join(os.getcwd(), "patients.db")
-    
-    # Check if we are in a restricted environment (like Streamlit Cloud)
     if not os.access(os.getcwd(), os.W_OK):
         db_path = os.path.join("/tmp", "patients.db")
 
     conn = sqlite3.connect(db_path, check_same_thread=False)
-
     conn.execute("""
     CREATE TABLE IF NOT EXISTS patients(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,16 +85,36 @@ def init_db():
         timestamp TEXT
     )
     """)
-
     conn.commit()
     return conn
 
-# Initialize connection
 conn = init_db()
 c = conn.cursor()
 
 # -------------------
-# ROLE
+# UTILITY: PDF GENERATOR
+# -------------------
+def generate_pdf(data, report_type="Patient"):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, f"{report_type} Risk Report", ln=True, align='C')
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", size=12)
+    if isinstance(data, pd.DataFrame):
+        for col in data.columns:
+            val = data[col].iloc[0]
+            pdf.cell(200, 10, f"{col}: {val}", ln=True)
+    
+    pdf.ln(10)
+    pdf.set_font("Arial", 'I', 10)
+    pdf.cell(200, 10, f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+    
+    return pdf.output(dest='S').encode('latin-1')
+
+# -------------------
+# ROLE SELECTION
 # -------------------
 role = st.sidebar.selectbox("Login as", ["Patient", "Doctor"])
 
@@ -112,7 +122,6 @@ role = st.sidebar.selectbox("Login as", ["Patient", "Doctor"])
 # PATIENT SIDE
 # ==========================================================
 if role == "Patient":
-
     st.header("👤 Patient Self-Assessment")
 
     age = st.number_input("Age", 1, 120, 30)
@@ -127,31 +136,18 @@ if role == "Patient":
     weakness = st.selectbox("Weakness", ["No", "Yes"])
 
     if st.button("Check Preliminary Risk"):
-
         bmi = weight / ((height / 100) ** 2)
-        
-        risk_score = sum([
-            thirst == "Yes",
-            urination == "Yes",
-            weight_loss == "Yes",
-            weakness == "Yes",
-            family == "Yes",
-            activity == "Low",
-            bmi > 30
-        ])
+        risk_score = sum([thirst == "Yes", urination == "Yes", weight_loss == "Yes", 
+                          weakness == "Yes", family == "Yes", activity == "Low", bmi > 30])
 
         if risk_score <= 2:
-            risk = "Low"
-            risk_color = "#28a745"
+            risk, risk_color = "Low", "#28a745"
         elif risk_score <= 4:
-            risk = "Medium"
-            risk_color = "#ffc107"
+            risk, risk_color = "Medium", "#ffc107"
         else:
-            risk = "High"
-            risk_color = "#dc3545"
+            risk, risk_color = "High", "#dc3545"
 
         st.subheader("Assessment Results")
-        
         col1, col2 = st.columns([1, 2])
         
         with col1:
@@ -177,44 +173,28 @@ if role == "Patient":
             st.progress(risk_score / 7)
 
         st.subheader("🧠 Clinical Insight")
-
-        if risk == "Low":
-            st.info("Maintain your healthy lifestyle.")
-        elif risk == "Medium":
-            st.warning("Monitor your health and improve diet/exercise.")
-        else:
-            st.error("Seek medical advice immediately.")
+        if risk == "Low": st.info("Maintain your healthy lifestyle.")
+        elif risk == "Medium": st.warning("Monitor your health and improve diet/exercise.")
+        else: st.error("Seek medical advice immediately.")
 
         result_data = pd.DataFrame([{
             "Age": age,
             "BMI": round(bmi, 2),
             "Risk": risk,
-            "Timestamp": datetime.now()
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
         }])
 
         csv = result_data.to_csv(index=False)
         st.download_button("Download Result (CSV)", csv, "patient_result.csv")
 
-        def generate_pdf(data):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, "Patient Risk Report", ln=True)
-
-            for col in data.columns:
-                pdf.cell(200, 10, f"{col}: {data[col].iloc[0]}", ln=True)
-
-            return pdf.output(dest='S').encode('latin-1')
-
-        pdf_data = generate_pdf(result_data)
+        pdf_data = generate_pdf(result_data, "Patient")
         st.download_button("Download Result (PDF)", pdf_data, "patient_result.pdf")
 
 # ==========================================================
 # DOCTOR SIDE
 # ==========================================================
 elif role == "Doctor":
-
-    st.header("🩺 Clinical Diabetes Prediction")
+    st.header("⛑️ Clinical Diabetes Prediction")
 
     feature_names = ["Pregnancies", "Glucose", "Blood Pressure", "Skin Thickness", "Insulin", "BMI", "DPF", "Age"]
     
@@ -230,7 +210,6 @@ elif role == "Doctor":
     ]
 
     if st.button("Predict Diabetes Risk"):
-
         try:
             data = np.array([inputs])
             scaled = scaler.transform(data)
@@ -247,7 +226,6 @@ elif role == "Doctor":
             conn.commit()
 
             st.subheader("Prediction Result")
-            
             col1, col2 = st.columns([1, 2])
             
             with col1:
@@ -274,23 +252,15 @@ elif role == "Doctor":
                 st.progress(float(prob))
 
             st.subheader("🧠 Clinical Insight")
-            if risk == "Low":
-                st.info("Patient is stable.")
-            elif risk == "Medium":
-                st.warning("Patient needs monitoring.")
-            else:
-                st.error("Immediate medical attention required.")
+            if risk == "Low": st.info("Patient is stable.")
+            elif risk == "Medium": st.warning("Patient needs monitoring.")
+            else: st.error("Immediate medical attention required.")
 
-            # -------------------
-            #  SHAP FEATURES (UPDATED)
-            # -------------------
+            # SHAP Interpretation
             st.markdown("---")
             st.subheader("📊 Top Contributing Factors")
-
             explainer = shap.Explainer(model)
             shap_values = explainer(scaled)
-
-            # Process SHAP values for display
             vals = shap_values.values
             base = shap_values.base_values
 
@@ -302,60 +272,76 @@ elif role == "Doctor":
                 vals = vals[0]
                 base = base[0]
 
-            # Create the Feature Importance Table
-            shap_df = pd.DataFrame({
-                "Feature": feature_names,
-                "SHAP Value": np.around(vals, 4)
-            }).sort_values(by="SHAP Value", key=abs, ascending=False)
-            
+            shap_df = pd.DataFrame({"Feature": feature_names, "SHAP Value": np.around(vals, 4)}).sort_values(by="SHAP Value", key=abs, ascending=False)
             st.table(shap_df.head(5))
 
+            # --- SHAP WATERFALL EXPLANATION ---
+            st.markdown("---")
             st.subheader("📈 SHAP Waterfall Explanation")
+
+            explainer = shap.Explainer(model)
+            shap_values = explainer(scaled)
+
+            # Extract values based on model output shape
+            vals = shap_values.values
+            base = shap_values.base_values
+
+            if len(vals.shape) == 3: # For Multi-class/Probability models
+                class_index = 1 if vals.shape[2] > 1 else 0
+                vals = vals[0, :, class_index]
+                base = base[0, class_index] if len(base.shape) > 1 else base[0]
+            else:
+                vals = vals[0]
+                base = base[0]
+
+            # Generate and Display Waterfall Plot
             fig, ax = plt.subplots(figsize=(10, 6))
             shap.plots.waterfall(
                 shap.Explanation(
                     values=vals,
                     base_values=base,
-                    data=inputs, # Using raw inputs for better labels
+                    data=inputs, 
                     feature_names=feature_names
                 ),
                 show=False
             )
             st.pyplot(fig)
 
-            # Export
-            st.subheader("⬇ Export Result")
-            result_data = pd.DataFrame([{
-                "Prediction": prediction,
-                "Probability": prob,
-                "Risk": risk,
-                "Timestamp": datetime.now()
+            # Export Section for Doctor (PDF is now under CSV)
+            st.subheader("⬇ Export Clinical Result")
+            doctor_export_data = pd.DataFrame([{
+                "Age": inputs[7],
+                "Glucose": inputs[1],
+                "BMI": inputs[5],
+                "Prediction": "Positive" if prediction == 1 else "Negative",
+                "Probability": f"{prob*100:.2f}%",
+                "Clinical Risk": risk,
+                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
             }])
-            csv = result_data.to_csv(index=False)
-            st.download_button("Download CSV", csv, "doctor_result.csv")
+            
+            csv_doc = doctor_export_data.to_csv(index=False)
+            st.download_button("Download CSV", csv_doc, "doctor_prediction.csv")
+            
+            pdf_doc = generate_pdf(doctor_export_data, "Clinical")
+            st.download_button("Download PDF", pdf_doc, "doctor_prediction.pdf")
 
         except Exception as e:
             st.error(f"Prediction failed: {e}")
 
-   # Records
-    st.subheader("📋 Patient Records")
-    
-    # Use a fresh query to get data
+    # Records Table
+    st.markdown("---")
+    st.subheader("📋 Patient History Records")
     history = pd.read_sql("SELECT * FROM patients", conn)
 
     if len(history) > 0:
-        # --- FIX: Ensure the prediction column is readable ---
-        # Convert 0/1 to text labels so Streamlit renders them correctly
         display_df = history.copy()
         display_df['prediction'] = display_df['prediction'].map({0: 'Negative', 1: 'Positive'})
-        
-        # Display the modified dataframe
         st.dataframe(display_df)
         
-        # Keep the original CSV for download
-        csv = history.to_csv(index=False)
-        st.download_button("Download Records (CSV)", csv, "patient_records.csv")
+        csv_hist = history.to_csv(index=False)
+        st.download_button("Download Records (CSV)", csv_hist, "all_patient_records.csv")
     else:
-        st.warning("No patient records found yet.")
+        st.warning("No records found.")
+
 st.markdown("---")
 st.caption("Disclaimer: This tool provides a risk assessment and is not a substitute for professional medical advice.")
