@@ -348,20 +348,29 @@ elif role == "Doctor":
         except Exception as e:
             st.error(f"Prediction failed: {e}")
 
-    # Records Table
+   # Records Table
     st.markdown("---")
     st.subheader("📋 Patient History Records")
-    history = pd.read_sql("SELECT * FROM patients", conn)
+    
+    # We use a button or just a raw query to ensure we get the latest data
+    # after the INSERT above has been committed.
+    history = pd.read_sql("SELECT * FROM patients ORDER BY id DESC", conn)
 
-    if len(history) > 0:
+    if not history.empty:
         display_df = history.copy()
-        display_df['prediction'] = display_df['prediction'].map({0: 'Negative', 1: 'Positive'})
-        st.dataframe(display_df)
         
+        # FIX: Ensure prediction is integer before mapping to avoid blank cells
+        display_df['prediction'] = pd.to_numeric(display_df['prediction'], errors='coerce')
+        display_df['prediction'] = display_df['prediction'].map({0: 'Negative', 1: 'Positive'})
+        
+        # Display the table
+        st.dataframe(display_df, use_container_width=True)
+        
+        # Download button for the full history
         csv_hist = history.to_csv(index=False)
-        st.download_button("Download Records (CSV)", csv_hist, "all_patient_records.csv")
+        st.download_button("Download All Records (CSV)", csv_hist, "all_patient_records.csv")
     else:
-        st.warning("No records found.")
+        st.info("No patient records found in the database.")
         
         
         
