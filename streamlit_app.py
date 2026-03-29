@@ -63,21 +63,22 @@ model, scaler = load_models()
 # -------------------
 @st.cache_resource
 def init_db():
-    # 1. Determine the correct path
     db_name = "patients.db"
     
-    # Check if we are in a cloud environment or if the current folder isn't writable
+    # Check if the current directory is writable (True on your PC, False on Streamlit Cloud)
     if not os.access(os.getcwd(), os.W_OK):
-        # Move the DB to the /tmp folder which is always writable on cloud hosts
+        # Use /tmp for Cloud deployment - this is a writable temporary directory
         db_path = os.path.join("/tmp", db_name)
     else:
-        # Keep it local for your own computer development
+        # Use local folder for development on your PC
         db_path = os.path.join(os.getcwd(), db_name)
 
-    # 2. Connect to the database
+    # Connect to the database
     conn = sqlite3.connect(db_path, check_same_thread=False)
+    
+    # Enable WAL mode to improve concurrent write/read access
+    conn.execute("PRAGMA journal_mode=WAL;")
 
-    # 3. Initialize table
     conn.execute("""
     CREATE TABLE IF NOT EXISTS patients(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +102,6 @@ def init_db():
 # Initialize connection
 conn = init_db()
 c = conn.cursor()
-
 
 # -------------------
 # UTILITY: PDF GENERATOR FOR EXPORT
