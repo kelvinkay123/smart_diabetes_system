@@ -63,8 +63,13 @@ model, scaler = load_models()
 # -------------------
 @st.cache_resource
 def init_db():
-    # ✅ ALWAYS use /tmp (safe for Streamlit Cloud & deployments)
-    db_path = "/tmp/patients.db"
+    # Use a writable path. On Streamlit Cloud, /tmp/ is usually the best bet.
+    # On local Windows/Mac, current directory is usually fine unless restricted.
+    db_path = os.path.join(os.getcwd(), "patients.db")
+    
+    # Check if we are in a restricted environment (like Streamlit Cloud)
+    if not os.access(os.getcwd(), os.W_OK):
+        db_path = os.path.join("/tmp", "patients.db")
 
     conn = sqlite3.connect(db_path, check_same_thread=False)
 
@@ -88,6 +93,11 @@ def init_db():
 
     conn.commit()
     return conn
+
+# Initialize connection
+conn = init_db()
+c = conn.cursor()
+
 
 # -------------------
 # UTILITY: PDF GENERATOR
