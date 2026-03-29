@@ -307,7 +307,7 @@ elif role == "Doctor":
             )
             st.pyplot(fig)
 
-            # Export Section for Doctor (PDF is now under CSV)
+            # Export Section for Doctor 
             st.subheader("⬇ Export Clinical Result")
             doctor_export_data = pd.DataFrame([{
                 "Age": inputs[7],
